@@ -1,77 +1,93 @@
 import { RedstoneSimulator } from "./simulator.js";
-import { Lever } from "./blocks/lever.js";
-import { GenericSolidBlock } from "./blocks/solid.js";
-import { RedstoneDust } from "./blocks/dust.js";
-import { Piston } from "./blocks/piston.js";
+import { Lever, GenericSolidBlock, RedstoneDust, Piston } from "./blocks.js";
 
-const sim = new RedstoneSimulator();
+function linearPowerTest() {
+  const sim = new RedstoneSimulator();
 
-sim.setBlock({ x: 0, y: 0, z: 0 }, new GenericSolidBlock());
-sim.setBlock({ x: 1, y: 0, z: 0 }, new GenericSolidBlock());
-sim.setBlock({ x: 2, y: 0, z: 0 }, new GenericSolidBlock());
-sim.setBlock({ x: 3, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 0, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 1, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 2, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 3, y: 0, z: 0 }, new GenericSolidBlock());
 
-sim.setBlock({ x: 0, y: 1, z: 0 }, new Lever({ x: 0, y: -1, z: 0 }));
-sim.setBlock({ x: 1, y: 1, z: 0 }, new RedstoneDust());
-sim.setBlock({ x: 2, y: 1, z: 0 }, new RedstoneDust());
-sim.setBlock({ x: 3, y: 1, z: 0 }, new RedstoneDust());
-sim.setBlock({ x: 4, y: 1, z: 0 }, new Piston());
+  sim.setBlock({ x: 0, y: 1, z: 0 }, new Lever({ x: 0, y: -1, z: 0 }));
+  sim.setBlock({ x: 1, y: 1, z: 0 }, new RedstoneDust());
+  sim.setBlock({ x: 2, y: 1, z: 0 }, new RedstoneDust());
+  sim.setBlock({ x: 3, y: 1, z: 0 }, new RedstoneDust());
+  sim.setBlock({ x: 4, y: 1, z: 0 }, new Piston());
 
-console.log("T0 (initial):");
-console.log(sim.render());
+  const show = (label: string) => {
+    console.log(`\n${label}:`);
+    console.log(sim.render());
+  };
 
-sim.toggleLever({ x: 0, y: 1, z: 0 });
-console.log("\nT0 (lever toggled):");
-console.log(sim.render());
+  const tickAndShow = (count: number) => {
+    for (let i = 0; i < count; i++) {
+      sim.tick();
+      show(`T${sim.getTick()}`);
+    }
+  };
 
-sim.tick();
-console.log("\nT1:");
-console.log(sim.render());
+  show("T0 (initial)");
 
-sim.tick();
-console.log("\nT2:");
-console.log(sim.render());
+  sim.toggleLever({ x: 0, y: 1, z: 0 });
+  show("T0 (lever toggled)");
 
-sim.tick();
-console.log("\nT3:");
-console.log(sim.render());
+  tickAndShow(4);
 
-sim.tick();
-console.log("\nT4:");
-console.log(sim.render());
+  console.log("\n=== TURNING LEVER OFF ===");
+  sim.toggleLever({ x: 0, y: 1, z: 0 });
+  show("T4 (lever toggled off)");
 
-console.log("\n=== TURNING LEVER OFF ===\n");
+  tickAndShow(6);
 
-sim.toggleLever({ x: 0, y: 1, z: 0 });
-console.log("T4 (lever toggled off):");
-console.log(sim.render());
-
-sim.tick();
-console.log("\nT5:");
-console.log(sim.render());
-
-sim.tick();
-console.log("\nT6:");
-console.log(sim.render());
-
-sim.tick();
-console.log("\nT7:");
-console.log(sim.render());
-
-sim.tick();
-console.log("\nT8:");
-console.log(sim.render());
-
-sim.tick();
-console.log("\nT9:");
-console.log(sim.render());
-
-sim.tick();
-console.log("\nT10:");
-console.log(sim.render());
-
-for (let i = 11; i <= 20; i++) {
-  sim.tick();
+  for (let i = 0; i < 10; i++) sim.tick();
+  show("T20");
 }
-console.log("\nT20:");
-console.log(sim.render());
+
+function tJunctionTest() {
+  const sim = new RedstoneSimulator();
+
+  sim.setBlock({ x: 0, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 1, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 2, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 3, y: 0, z: 0 }, new GenericSolidBlock());
+  sim.setBlock({ x: 1, y: 0, z: 1 }, new GenericSolidBlock());
+
+  sim.setBlock({ x: 0, y: 1, z: 0 }, new Lever({ x: 1, y: 0, z: 0 }));
+  sim.setBlock({ x: 1, y: 1, z: 0 }, new RedstoneDust());
+  sim.setBlock({ x: 2, y: 1, z: 0 }, new RedstoneDust());
+  sim.setBlock({ x: 3, y: 1, z: 0 }, new RedstoneDust());
+  sim.setBlock({ x: 4, y: 1, z: 0 }, new Piston());
+  sim.setBlock({ x: 1, y: 1, z: 1 }, new Lever({ x: 0, y: -1, z: 0 }));
+
+  const show = (label: string) => {
+    console.log(`\n${label}:`);
+    console.log(sim.render());
+  };
+
+  console.log("\n=== T-JUNCTION TEST ===");
+  show("Initial");
+
+  sim.toggleLever({ x: 1, y: 1, z: 1 });
+  show("L1 on");
+  sim.tick();
+  show("T1");
+
+  sim.toggleLever({ x: 0, y: 1, z: 0 });
+  show("L1+L2 on");
+  sim.tick();
+  show("T2");
+
+  sim.toggleLever({ x: 1, y: 1, z: 1 });
+  show("L2 on only");
+  sim.tick();
+  show("T3");
+
+  sim.toggleLever({ x: 0, y: 1, z: 0 });
+  show("Both off");
+  sim.tick();
+  show("T4");
+}
+
+linearPowerTest();
+tJunctionTest();

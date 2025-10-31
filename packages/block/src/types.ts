@@ -9,13 +9,3 @@ export const BlockType = {
 } as const;
 
 export type BlockType = (typeof BlockType)[keyof typeof BlockType];
-
-export interface Block {
-  type: BlockType;
-  getOutgoingPower(): PowerLevel;
-  evaluate(
-    getIncomingPower: (offset: Position) => PowerLevel,
-    getNeighbor: (offset: Position) => Block | undefined,
-  ): boolean;
-  toString(): string;
-}

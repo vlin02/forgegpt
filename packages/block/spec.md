@@ -1,78 +1,89 @@
-# Redstone Core v1 — Minimal Normative RFC (Implementation‑Independent)
+Redstone Core v1.2 — Normative Specification
 
-## 0. Scope
+1. Scope
 
-Defines deterministic behavior for **Lever → RedstoneDust → Piston** connected on **GenericSolidBlock** support. Applies to any simulation engine. Contains only rules required for correct power propagation and tick timing.
+Defines a deterministic tick-based model for the interaction: Lever → RedstoneDust → Piston on OpaqueBlocks.
 
-## 1. Core Concepts
+Covers: game ticks, stateless propagation, mechanical scheduling, power propagation.
 
-- **Block:** occupies one grid cell; interacts via six faces.
-- **Faces:** {North, South, East, West, Up, Down}. Adjacent blocks share a face.
-- **Game Tick (GT):** discrete step, 20 GT per second.
-- **Power Level:** integer 0–15 (0 = unpowered, 15 = max).
-- **Strong Power:** direct emission (lever → attached block).
-- **Weak Power:** indirect emission (dust → opaque block).
+Out-of-scope: repeaters, comparators, torches, observers, sticky pistons, vertical dust, quasi-connectivity, block pushing.
 
-## 2. Tick Model
+2. Tick Model
 
-1. Global scheduler tracks an **update set** of positions.
-2. **Emit (GT t):** placements, removals, or state changes enqueue their position and six neighbors for evaluation in GT t+1.
-3. **Evaluate (GT t):** all positions in the update set recompute simultaneously using only committed states from GT t−1.
-4. **Commit (end of GT t):** new states become active. Changed blocks enqueue updates for GT t+1.
-5. No ordering within a GT. Results appear next tick.
+Game ticks proceed discretely: t = 0, 1, 2, …
 
-## 3. Power Propagation
+Each tick t has two phases:
 
-- A block’s **outgoing power per face** depends on its state.
-- A block’s **incoming power** on a face equals the maximum outgoing power from its adjacent neighbor on that face.
-- For multiple inputs, take the **maximum** value.
+Intra-tick closure: all stateless components (Lever, RedstoneDust, OpaqueBlock) react to input changes and recompute outputs immediately, repeated until no further changes (a fixpoint).
 
-## 4. Block Definitions
+Block events: mechanical components (Pistons) do not act during intra-tick closure. When a power state change is detected, the mechanical action executes in the same tick after intra-tick closure completes.
 
-### 4.1 GenericSolidBlock
+3. Power Model
 
-- Opaque support block.
-- Accepts **strong power 15** from any attached Lever.
-- Accepts **weak power p** from adjacent dust (p>0).
-- When strongly powered, emits **15 on all faces** at the next evaluation.
+Power level: integer in [0, 15].
 
-### 4.2 Lever
+Strong power: direct emission from a powered component.
 
-- Binary state: on/off.
-- Must attach to a GenericSolidBlock.
-- When toggled at GT t:
-  - At GT t+1, strongly powers its attachment block at 15.
-  - Emits 15 on its output face (opposite the attached face).
+Weak power: indirect emission from a powered opaque block or from RedstoneDust.
 
-- When off, emits 0.
+Propagation: a block's input power = max of output powers of all face-adjacent neighbors.
 
-### 4.3 RedstoneDust
+4. Component Rules
 
-- Exists on top of an opaque block.
-- Interacts only with four horizontal neighbors (±x, ±z).
-- Removed at GT t+1 if its support block is removed.
-- During evaluation:
-  1. If any horizontal neighbor is a strongly powered block, input = 15.
-  2. From each dust neighbor with power q, input = q−1 (not <0).
-  3. Desired power = max(all inputs).
-  4. If desired ≠ current, update and enqueue neighbors for next GT.
+4.1 OpaqueBlock
 
-### 4.4 Piston
+Supports lever attachments and dust placement on top.
 
-- Binary state: extended/retracted; has a facing.
-- Powered if any adjacent face receives power >0.
-- On unpowered→powered transition: extend at GT+1.
-- On powered→unpowered transition: retract at GT+1.
-- Does not emit power; no pushing or stickiness.
+If the block receives strong power from any face-adjacent neighbor, it emits weak power level 15 to all face-adjacent positions.
 
-## 5. Conformance
+Otherwise it emits power level 0 to all face-adjacent positions.
 
-- **C1:** Lever on → attachment block emits 15 next tick.
-- **C2:** Dust line decays [15,14,13,…].
-- **C3:** Dust removed one tick after support removal.
-- **C4:** Piston extends/retracts one tick after power transition.
-- **C5:** Only face‑adjacent power counts (no quasi‑connectivity).
+4.2 Lever
 
-## 6. Out of Scope
+Binary state: ON or OFF.
 
-Repeaters, comparators, torches, observers, sticky pistons, block pushing, and vertical dust links.
+Must attach to an OpaqueBlock.
+
+When toggled, new state is effective immediately in the intra-tick closure.
+
+If ON: emits strong power level 15 to its attachment block; emits weak power level 15 to all other face-adjacent positions.
+
+If OFF: emits power level 0 to all face-adjacent positions.
+
+4.3 RedstoneDust
+
+Placed on top of an OpaqueBlock.
+
+Connects to four horizontal neighbors (±X, ±Z).
+
+If its support block is removed or a solid block occupies its position, the dust is removed immediately during intra-tick closure.
+
+During intra-tick closure, dust power level is computed as:
+
+  max(adjacent strong-power sources, max(adjacent dust power − 1, 0))
+
+Dust emits its power level as weak power to horizontally adjacent positions.
+
+4.4 Piston
+
+Two states: Extended or Retracted.
+
+Considered powered if any face-adjacent position emits power level > 0.
+
+On power gain (previously unpowered → powered): extend after intra-tick closure completes.
+
+On power loss (previously powered → unpowered): retract after intra-tick closure completes.
+
+Piston does not emit power.
+
+5. Conformance Requirements
+
+A Lever toggled ON causes its attachment block and adjacent components to observe the power emission within the same tick's intra-tick closure.
+
+Dust power decays by 1 per horizontal hop, never by time.
+
+Dust breaks immediately if unsupported or obstructed.
+
+A Piston extends or retracts in the same tick as its power transition, after intra-tick closure completes.
+
+Power transmission occurs only between face-adjacent blocks.
