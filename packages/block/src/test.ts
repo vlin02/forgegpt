@@ -1,93 +1,72 @@
-import { RedstoneSimulator } from "./simulator.js";
-import { Lever, GenericSolidBlock, RedstoneDust, Piston } from "./blocks.js";
+import { Builder, DOWN, EAST, WEST, NORTH, SOUTH, UP, Position } from "./builder.js";
+import { OpaqueBlock, RedstoneDust, Piston } from "./blocks.js";
+import { Engine } from "./engine.js";
 
-function linearPowerTest() {
-  const sim = new RedstoneSimulator();
-
-  sim.setBlock({ x: 0, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 1, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 2, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 3, y: 0, z: 0 }, new GenericSolidBlock());
-
-  sim.setBlock({ x: 0, y: 1, z: 0 }, new Lever({ x: 0, y: -1, z: 0 }));
-  sim.setBlock({ x: 1, y: 1, z: 0 }, new RedstoneDust());
-  sim.setBlock({ x: 2, y: 1, z: 0 }, new RedstoneDust());
-  sim.setBlock({ x: 3, y: 1, z: 0 }, new RedstoneDust());
-  sim.setBlock({ x: 4, y: 1, z: 0 }, new Piston());
-
-  const show = (label: string) => {
-    console.log(`\n${label}:`);
-    console.log(sim.render());
-  };
-
-  const tickAndShow = (count: number) => {
-    for (let i = 0; i < count; i++) {
-      sim.tick();
-      show(`T${sim.getTick()}`);
-    }
-  };
-
-  show("T0 (initial)");
-
-  sim.toggleLever({ x: 0, y: 1, z: 0 });
-  show("T0 (lever toggled)");
-
-  tickAndShow(4);
-
-  console.log("\n=== TURNING LEVER OFF ===");
-  sim.toggleLever({ x: 0, y: 1, z: 0 });
-  show("T4 (lever toggled off)");
-
-  tickAndShow(6);
-
-  for (let i = 0; i < 10; i++) sim.tick();
-  show("T20");
+function assert(condition: boolean, message: string): void {
+  if (!condition) throw new Error(`Assertion failed: ${message}`);
 }
 
-function tJunctionTest() {
-  const sim = new RedstoneSimulator();
+const sim = new Engine();
+const b = new Builder(sim);
 
-  sim.setBlock({ x: 0, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 1, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 2, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 3, y: 0, z: 0 }, new GenericSolidBlock());
-  sim.setBlock({ x: 1, y: 0, z: 1 }, new GenericSolidBlock());
+b.solid().save("base0")
+  .move(EAST).solid().save("base1")
+  .move(SOUTH).solid().save("base2")
+  .move(EAST).move(UP).solid().save("baseWeak")
+  .move(DOWN).move(EAST).solid().save("baseIsolated")
+  .move(EAST).move(NORTH).solid().save("basePiston")
+  .move(EAST).move(SOUTH).move(UP).solid().save("blockToPush")
+  .move(DOWN).move(NORTH).solid().save("baseDustOnBlock")
+  .at(0, 0, 1).solid().save("baseVertLower")
+  .move(EAST).move(SOUTH).move(UP).solid().save("baseVertUpper")
+  .at(0, 1, 0).lever(DOWN)
+  .move(EAST).dust().save("dust1")
+  .move(SOUTH).dust().save("dust2")
+  .move(EAST.mul(2)).dust().save("dustIsolated")
+  .at(5, 1, 0).dust()
+  .move(SOUTH).move(UP).dust()
+  .at(0, 1, 1).dust().save("dustVertLower")
+  .move(EAST).move(UP).move(SOUTH).dust().save("dustVertUpper")
+  .at(4, 1, 0).lever(DOWN)
+  .move(SOUTH).piston(EAST).save("piston");
 
-  sim.setBlock({ x: 0, y: 1, z: 0 }, new Lever({ x: 1, y: 0, z: 0 }));
-  sim.setBlock({ x: 1, y: 1, z: 0 }, new RedstoneDust());
-  sim.setBlock({ x: 2, y: 1, z: 0 }, new RedstoneDust());
-  sim.setBlock({ x: 3, y: 1, z: 0 }, new RedstoneDust());
-  sim.setBlock({ x: 4, y: 1, z: 0 }, new Piston());
-  sim.setBlock({ x: 1, y: 1, z: 1 }, new Lever({ x: 0, y: -1, z: 0 }));
+const base0 = b.ref("base0") as OpaqueBlock;
+const baseWeak = b.ref("baseWeak") as OpaqueBlock;
+const blockToPush = b.ref("blockToPush") as OpaqueBlock;
+const dust1 = b.ref("dust1") as RedstoneDust;
+const dust2 = b.ref("dust2") as RedstoneDust;
+const dustIsolated = b.ref("dustIsolated") as RedstoneDust;
+const dustVertLower = b.ref("dustVertLower") as RedstoneDust;
+const dustVertUpper = b.ref("dustVertUpper") as RedstoneDust;
+const piston = b.ref("piston") as Piston;
 
-  const show = (label: string) => {
-    console.log(`\n${label}:`);
-    console.log(sim.render());
-  };
+assert(!piston.extended, "initial");
 
-  console.log("\n=== T-JUNCTION TEST ===");
-  show("Initial");
+sim.toggleLever(new Position(0, 1, 0));
+sim.toggleLever(new Position(4, 1, 0));
+sim.tick();
 
-  sim.toggleLever({ x: 1, y: 1, z: 1 });
-  show("L1 on");
-  sim.tick();
-  show("T1");
+assert(base0.power === 15, "strong power");
+assert(dust1.power === 15, "weak power from strongly-powered block");
+assert(dust2.power === 14, "decay");
+assert(baseWeak.power === 14, "block weakly powered by dust");
+assert(dustIsolated.power === 0, "weakly-powered block cannot power dust");
+assert(dustVertLower.power === 15, "vertical lower dust receives lever power");
+assert(dustVertUpper.power === 13, "vertical upper dust via diagonal connection");
+assert(piston.extended, "piston pushes block");
+assert(sim.getBlock(new Position(6, 1, 1)) === blockToPush, "block moved");
+assert(sim.getBlock(new Position(5, 2, 1)) === undefined, "dust breaks on push");
 
-  sim.toggleLever({ x: 0, y: 1, z: 0 });
-  show("L1+L2 on");
-  sim.tick();
-  show("T2");
+sim.toggleLever(new Position(4, 1, 0));
+sim.removeBlock(new Position(1, 0, 0));
+sim.tick();
 
-  sim.toggleLever({ x: 1, y: 1, z: 1 });
-  show("L2 on only");
-  sim.tick();
-  show("T3");
+assert(sim.getBlock(new Position(1, 1, 0)) === undefined, "dust breaks");
+assert(!piston.extended, "piston retracts");
 
-  sim.toggleLever({ x: 0, y: 1, z: 0 });
-  show("Both off");
-  sim.tick();
-  show("T4");
-}
+sim.removeBlock(new Position(0, 0, 0));
+sim.tick();
 
-linearPowerTest();
-tJunctionTest();
+assert(sim.getBlock(new Position(0, 1, 0)) === undefined, "lever breaks");
+
+console.log("✓ All spec features verified");

@@ -1,8 +1,9 @@
-import type { Position } from "./types.js";
-import { BlockType } from "./types.js";
+import type { Position } from "./position.js";
+
+export type BlockType = "solid" | "lever" | "dust" | "piston";
 
 export class Lever {
-  type = BlockType.LEVER;
+  readonly type = "lever" as const;
   on = false;
   attachmentOffset: Position;
 
@@ -16,8 +17,14 @@ export class Lever {
 }
 
 export class Piston {
-  type = BlockType.PISTON;
+  readonly type = "piston" as const;
   extended = false;
+  facing: Position;
+  faceAdjPowered = false; // Track face-adjacent power for QC update requirement
+
+  constructor(facing: Position) {
+    this.facing = facing;
+  }
 
   toString(): string {
     return this.extended ? "P>" : "P|";
@@ -25,16 +32,17 @@ export class Piston {
 }
 
 export class RedstoneDust {
-  type = BlockType.DUST;
+  readonly type = "dust" as const;
   power = 0;
+  connectedDirs = new Set<string>(); // posKey of direction offsets
 
   toString(): string {
     return `~${this.power}`;
   }
 }
 
-export class GenericSolidBlock {
-  type = BlockType.SOLID;
+export class OpaqueBlock {
+  readonly type = "solid" as const;
   power = 0;
 
   toString(): string {
@@ -42,4 +50,4 @@ export class GenericSolidBlock {
   }
 }
 
-export type Block = Lever | Piston | RedstoneDust | GenericSolidBlock;
+export type Block = Lever | Piston | RedstoneDust | OpaqueBlock;
