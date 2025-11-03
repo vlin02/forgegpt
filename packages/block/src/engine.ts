@@ -12,10 +12,15 @@ export class Engine {
   private positions = new WeakMap<Block, Position>();
   private currentTick = 0;
   private pendingMoves: PendingMove[] = [];
+  private pendingClears: Position[] = [];
 
-  setBlock(pos: Position, block: Block): void {
+  setBlock(pos: Position, block: Block): boolean {
+    const existing = this.getBlock(pos);
+    if (existing) return false;
+    
     this.blocks.set(pos.toKey(), block);
     this.positions.set(block, pos);
+    return true;
   }
 
   removeBlock(blockOrPos: Block | Position): void {
@@ -34,6 +39,10 @@ export class Engine {
     return this.positions.get(block);
   }
 
+  getAllBlocks(): Map<string, Block> {
+    return this.blocks;
+  }
+
   toggleLever(blockOrPos: Block | Position): void {
     const pos = blockOrPos instanceof Position ? blockOrPos : this.positions.get(blockOrPos);
     if (!pos) return;
@@ -45,10 +54,8 @@ export class Engine {
 
   tick(): void {
     const toProcess = new Set(this.blocks.keys());
-
     const pistonUpdates = new Set<string>();
 
-    // Intra-tick closure: evaluate stateless components until fixpoint
     while (toProcess.size > 0) {
       const current = Array.from(toProcess);
       toProcess.clear();
@@ -65,11 +72,9 @@ export class Engine {
         const pos = Position.fromKey(key);
 
         if (block.type === "lever") {
-          const attachmentPos = pos.add(block.attachmentOffset);
-          const attachment = this.getBlock(attachmentPos);
+          const attachment = this.getBlock(pos.add(block.attachmentOffset));
           if (!attachment || attachment.type !== "solid") {
             this.removeBlock(pos);
-            continue;
           }
           continue;
         }
@@ -80,25 +85,25 @@ export class Engine {
             this.removeBlock(pos);
             continue;
           }
-        }
-
-        let changed = false;
-        if (block.type === "dust") {
-          changed = this.evaluateDust(block, pos);
+          const changed = this.evaluateDust(block, pos);
+          if (changed) {
+            for (const offset of NEIGHBOR_OFFSETS) {
+              const neighborKey = pos.add(offset).toKey();
+              if (this.blocks.has(neighborKey)) toProcess.add(neighborKey);
+            }
+          }
         } else if (block.type === "solid") {
-          changed = this.evaluateSolidBlock(block, pos);
-        }
-
-        if (changed) {
-          for (const offset of NEIGHBOR_OFFSETS) {
-            const neighborKey = pos.add(offset).toKey();
-            if (this.blocks.has(neighborKey)) toProcess.add(neighborKey);
+          const changed = this.evaluateSolidBlock(block, pos);
+          if (changed) {
+            for (const offset of NEIGHBOR_OFFSETS) {
+              const neighborKey = pos.add(offset).toKey();
+              if (this.blocks.has(neighborKey)) toProcess.add(neighborKey);
+            }
           }
         }
       }
     }
 
-    // Evaluate pistons after closure
     for (const key of pistonUpdates) {
       const pos = Position.fromKey(key);
       const block = this.blocks.get(key);
@@ -107,54 +112,49 @@ export class Engine {
       }
     }
 
-    // D6: Apply all block movements atomically at end of Phase 2
     this.applyPendingMoves();
-
     this.currentTick++;
   }
   
   private applyPendingMoves(): void {
+    for (const pos of this.pendingClears) {
+      this.removeBlock(pos);
+    }
+    this.pendingClears = [];
+
     if (this.pendingMoves.length === 0) return;
     
-    // Lookup blocks before deleting
     const blocksToMove = this.pendingMoves.map(m => ({
       ...m,
       block: this.blocks.get(m.from.toKey())!
     }));
     
-    // P1: Destroy dust/lever in target cells (will be overwritten by moving blocks)
     for (const m of blocksToMove) {
-      const targetBlock = this.getBlock(m.to);
-      if (targetBlock && (targetBlock.type === "dust" || targetBlock.type === "lever")) {
+      const target = this.getBlock(m.to);
+      if (target && (target.type === "dust" || target.type === "lever")) {
         this.blocks.delete(m.to.toKey());
       }
     }
     
-    // Atomic motion - remove all blocks from source positions
     for (const m of blocksToMove) {
       this.blocks.delete(m.from.toKey());
     }
     
-    // Place all blocks at target positions
     for (const m of blocksToMove) {
       this.blocks.set(m.to.toKey(), m.block);
     }
     
-    // P5: Handle breaking mechanics for dust and levers
     const blocksToCheck = Array.from(this.blocks.entries());
     for (const [key, block] of blocksToCheck) {
       const pos = Position.fromKey(key);
       
       if (block.type === "dust") {
-        // Check if support block is still present
         const support = this.getBlock(pos.add(DOWN));
         if (!support || support.type !== "solid") {
           this.removeBlock(pos);
         }
       } else if (block.type === "lever") {
-        // Check if attachment block is still present
-        const attachmentPos = pos.add(block.attachmentOffset);
-        const attachment = this.getBlock(attachmentPos);
+        const attachment = this.getBlock(pos.add(block.attachmentOffset));
         if (!attachment || attachment.type !== "solid") {
           this.removeBlock(pos);
         }
@@ -167,17 +167,12 @@ export class Engine {
   private evaluatePiston(piston: Piston, pos: Position): boolean {
     let faceAdjPowered = false;
     
-    // Check 6 face-adjacent positions
     for (const offset of NEIGHBOR_OFFSETS) {
-      // D2: Up-facing piston cannot be powered by block above unless extended
-      if (offset.y === 1 && piston.facing.y === 1 && !piston.extended) {
-        continue;
-      }
+      if (offset.y === 1 && piston.facing.y === 1 && !piston.extended) continue;
       
       const neighbor = this.getBlock(pos.add(offset));
       if (!neighbor) continue;
       
-      // B1: Piston counts dust only if dust points into piston
       if (neighbor.type === "dust") {
         const dirToPiston = new Position(-offset.x, 0, -offset.z).toKey();
         if (neighbor.connectedDirs.has(dirToPiston) && neighbor.power > 0) {
@@ -190,30 +185,24 @@ export class Engine {
       }
     }
     
-    // Quasi-connectivity - check space directly above
     const above = this.getBlock(pos.add(UP));
     const qcPowered = above ? this.getBlockPower(above) > 0 : false;
     
-    // QC power requires block update (face-adjacent change) to activate
     const faceAdjChanged = faceAdjPowered !== piston.faceAdjPowered;
     piston.faceAdjPowered = faceAdjPowered;
     
-    // Only react to face-adjacent power changes, but consider total power
-    if (!faceAdjChanged) {
-      return false;
-    }
+    if (!faceAdjChanged) return false;
     
     const powered = faceAdjPowered || qcPowered;
     const changed = piston.extended !== powered;
     
-    // If extending, attempt to push blocks
     if (changed && powered) {
-      const moves = this.attemptPush(piston, pos);
-      if (moves) {
-        this.pendingMoves.push(...moves);
+      const plan = this.attemptPush(piston, pos);
+      if (plan) {
+        this.pendingMoves.push(...plan.moves);
+        this.pendingClears.push(...plan.clears);
         piston.extended = true;
       } else {
-        // Push failed, don't extend
         return false;
       }
     } else {
@@ -223,43 +212,40 @@ export class Engine {
     return changed;
   }
   
-  private attemptPush(piston: Piston, pistonPos: Position): PendingMove[] | null {
+  private attemptPush(piston: Piston, pistonPos: Position): { moves: PendingMove[]; clears: Position[] } | null {
     const moves: PendingMove[] = [];
-    const facing = piston.facing;
-    let currentPos = pistonPos.add(facing);
-    
-    // P1: Scan contiguous OpaqueBlocks (up to 12)
-    for (let i = 0; i < 12; i++) {
+    const clears: Position[] = [];
+    let currentPos = pistonPos.add(piston.facing);
+    let solidCount = 0;
+
+    while (true) {
       const block = this.getBlock(currentPos);
-      
-      if (!block) {
-        // Empty space, end of push line
-        break;
+      if (!block) break;
+      if (block.type === "piston") return null;
+
+      if (block.type === "dust" || block.type === "lever") {
+        clears.push(currentPos);
+        currentPos = currentPos.add(piston.facing);
+        continue;
       }
-      
-      // P3: Immovable obstacle
-      if (block.type === "piston") {
-        return null;
-      }
-      
-      // P1: Only solid blocks are pushable
+
       if (block.type === "solid") {
-        const targetPos = currentPos.add(facing);
-        moves.push({ from: currentPos, to: targetPos });
-        currentPos = currentPos.add(facing);
-      } else {
-        // P1: dust/lever break contiguity, end of push line
-        break;
+        solidCount++;
+        if (solidCount > 12) return null;
+        moves.push({ from: currentPos, to: currentPos.add(piston.facing) });
+        currentPos = currentPos.add(piston.facing);
+        continue;
       }
+
+      break;
     }
-    
-    // P2: Check sink (cell beyond push line) is empty of full blocks
-    const sinkBlock = this.getBlock(currentPos);
-    if (sinkBlock && (sinkBlock.type === "solid" || sinkBlock.type === "piston")) {
+
+    const sink = this.getBlock(currentPos);
+    if (sink && (sink.type === "solid" || sink.type === "piston")) {
       return null;
     }
-    
-    return moves;
+
+    return { moves, clears };
   }
 
   private isStronglyPowered(pos: Position): boolean {
@@ -285,57 +271,53 @@ export class Engine {
     let maxPower = 0;
     const connectedDirs = new Set<string>();
 
-    // Horizontal neighbors
+    const support = this.getBlock(pos.add(DOWN));
+    if (support?.type === "solid" && this.isStronglyPowered(pos.add(DOWN))) {
+      maxPower = Math.max(maxPower, support.power);
+    }
+
     for (const offset of HORIZONTAL_OFFSETS) {
       const neighborPos = pos.add(offset);
       const neighbor = this.getBlock(neighborPos);
       if (!neighbor) continue;
 
       if (neighbor.type === "dust") {
-        const decayed = Math.max(0, neighbor.power - 1);
-        maxPower = Math.max(maxPower, decayed);
+        maxPower = Math.max(maxPower, neighbor.power - 1);
         connectedDirs.add(offset.toKey());
-      } else if (neighbor.type === "solid") {
-        if (this.isStronglyPowered(neighborPos)) {
-          maxPower = Math.max(maxPower, neighbor.power);
-        }
-      } else if (neighbor.type === "piston") {
-        // B1: Dust connects to pistons for shape purposes
-        connectedDirs.add(offset.toKey());
-      } else {
-        const power = this.getIncomingPower(pos, offset, dust);
-        if (power === 15) {
-          maxPower = 15;
-        }
+      } else if (neighbor.type === "lever" && neighbor.on) {
+        maxPower = 15;
+      } else if (neighbor.type === "solid" && this.isStronglyPowered(neighborPos)) {
+        maxPower = Math.max(maxPower, neighbor.power);
       }
     }
 
-    // Vertical neighbors (±1 Y step connectivity)
     for (const vertOffset of [UP, DOWN]) {
       for (const horizOffset of HORIZONTAL_OFFSETS) {
-        const diagonalPos = pos.add(vertOffset, horizOffset);
-        const diagDust = this.getBlock(diagonalPos);
+        const diagPos = pos.add(vertOffset, horizOffset);
+        const diagDust = this.getBlock(diagPos);
         
         if (diagDust?.type === "dust") {
-          // Check both dust pieces sit on OpaqueBlocks
           const mySupport = this.getBlock(pos.add(DOWN));
-          const theirSupport = this.getBlock(diagonalPos.add(DOWN));
+          const theirSupport = this.getBlock(diagPos.add(DOWN));
           
           if (mySupport?.type === "solid" && theirSupport?.type === "solid") {
-            // Always use LOWER dust as reference for between positions
-            const lowerPos = vertOffset.y === 1 ? pos : diagonalPos;
+            const isUp = vertOffset.y === 1;
+            const lower = isUp ? pos : diagPos;
+            const upper = isUp ? diagPos : pos;
+            const lowerToUpper = isUp ? horizOffset : new Position(-horizOffset.x, 0, -horizOffset.z);
             
-            // Check if either edge-sharing cell cuts the connection
-            const betweenHoriz = lowerPos.add(horizOffset);
-            const betweenVert = lowerPos.add(UP);
-            const blockH = this.getBlock(betweenHoriz);
-            const blockV = this.getBlock(betweenVert);
+            const cellH = lower.add(lowerToUpper);
+            const cellV = lower.add(UP);
+            const blockH = this.getBlock(cellH);
+            const blockV = this.getBlock(cellV);
             
-            const cutsDiagonal = (blockH?.type === "solid") || (blockV?.type === "solid");
+            const lowerSupport = lower.add(DOWN);
+            const upperSupport = upper.add(DOWN);
+            const cutH = blockH?.type === "solid" && !cellH.equals(lowerSupport) && !cellH.equals(upperSupport);
+            const cutV = blockV?.type === "solid" && !cellV.equals(lowerSupport) && !cellV.equals(upperSupport);
             
-            if (!cutsDiagonal) {
-              const decayed = Math.max(0, diagDust.power - 1);
-              maxPower = Math.max(maxPower, decayed);
+            if (!cutH && !cutV) {
+              maxPower = Math.max(maxPower, diagDust.power - 1);
               connectedDirs.add(horizOffset.toKey());
             }
           }
@@ -353,33 +335,26 @@ export class Engine {
   }
 
   private evaluateSolidBlock(block: OpaqueBlock, pos: Position): boolean {
-    let hasStrongPower = false;
-    let maxWeakPower = 0;
+    if (this.isStronglyPowered(pos)) {
+      const changed = block.power !== 15;
+      block.power = 15;
+      return changed;
+    }
 
+    let maxWeakPower = 0;
     for (const offset of NEIGHBOR_OFFSETS) {
       const neighbor = this.getBlock(pos.add(offset));
-      if (!neighbor) continue;
-
-      const power = this.getIncomingPower(pos, offset, block);
-      if (neighbor.type === "lever" && power === 15) {
-        hasStrongPower = true;
-        break;
-      }
-      
-      if (neighbor.type === "dust") {
-        // B1: Dot only powers support block (below), not sides
+      if (neighbor?.type === "dust") {
         const isDot = neighbor.connectedDirs.size === 0;
-        const isSupport = offset.y === 1; // Solid is below dust
-        
+        const isSupport = offset.y === 1;
         if (!isDot || isSupport) {
           maxWeakPower = Math.max(maxWeakPower, neighbor.power);
         }
       }
     }
 
-    const newPower = hasStrongPower ? 15 : maxWeakPower;
-    const changed = block.power !== newPower;
-    block.power = newPower;
+    const changed = block.power !== maxWeakPower;
+    block.power = maxWeakPower;
     return changed;
   }
 
@@ -390,75 +365,167 @@ export class Engine {
     return 0;
   }
 
-  private getIncomingPower(
-    pos: Position,
-    offset: Position,
-    block: Block,
-  ): number {
-    const neighbor = this.getBlock(pos.add(offset));
-    if (!neighbor) return 0;
-
-    if (block.type === "solid" && neighbor.type === "lever") {
-      if (
-        neighbor.attachmentOffset.x === -offset.x &&
-        neighbor.attachmentOffset.y === -offset.y &&
-        neighbor.attachmentOffset.z === -offset.z
-      ) {
-        return neighbor.on ? 15 : 0;
-      }
-    }
-
-    return this.getBlockPower(neighbor);
-  }
-
   getTick(): number {
     return this.currentTick;
   }
 
-  snapshot(): string[] {
-    const entries: string[] = [];
-    for (const [key, block] of this.blocks) {
-      entries.push(`${key} ${block.toString()}`);
+  // --- Serialization ---
+  // Snapshot of engine state sufficient to reconstruct the world deterministically
+  toJSON(): EngineSnapshot {
+    const blocks: any[] = [];
+    for (const [key, block] of this.blocks.entries()) {
+      const pos = Position.fromKey(key);
+      if (block.type === "solid") {
+        blocks.push({ type: "solid", pos, power: block.power } satisfies SerializedSolid);
+      } else if (block.type === "lever") {
+        blocks.push({
+          type: "lever",
+          pos,
+          on: block.on,
+          attachmentOffset: { x: block.attachmentOffset.x, y: block.attachmentOffset.y, z: block.attachmentOffset.z },
+        } satisfies SerializedLever);
+      } else if (block.type === "dust") {
+        blocks.push({
+          type: "dust",
+          pos,
+          power: block.power,
+          connectedDirs: Array.from(block.connectedDirs),
+        } satisfies SerializedDust);
+      } else if (block.type === "piston") {
+        blocks.push({
+          type: "piston",
+          pos,
+          extended: block.extended,
+          faceAdjPowered: block.faceAdjPowered,
+          facing: { x: block.facing.x, y: block.facing.y, z: block.facing.z },
+        } satisfies SerializedPiston);
+      }
     }
-    return entries.sort();
+    return { tick: this.currentTick, blocks } as EngineSnapshot;
   }
 
-  render(): string {
-    if (this.blocks.size === 0) return "";
+  static fromJSON(data: EngineSnapshot): Engine {
+    const sim = new Engine();
+    sim.loadJSON(data);
+    return sim;
+  }
 
-    const positions: Position[] = [];
-    for (const key of this.blocks.keys()) {
-      const parts = key.split(",").map(Number);
-      positions.push(new Position(parts[0]!, parts[1]!, parts[2]!));
-    }
+  loadJSON(data: EngineSnapshot): void {
+    this.blocks.clear();
+    this.positions = new WeakMap();
+    this.pendingMoves = [];
+    this.pendingClears = [];
+    this.currentTick = data.tick | 0;
 
-    const minX = Math.min(...positions.map((p) => p.x));
-    const maxX = Math.max(...positions.map((p) => p.x));
-    const minY = Math.min(...positions.map((p) => p.y));
-    const maxY = Math.max(...positions.map((p) => p.y));
-    const minZ = Math.min(...positions.map((p) => p.z));
-    const maxZ = Math.max(...positions.map((p) => p.z));
-
-    const slices: string[] = [];
-
-    for (let z = minZ; z <= maxZ; z++) {
-      const lines: string[] = [];
-      for (let y = maxY; y >= minY; y--) {
-        let line = "";
-        for (let x = minX; x <= maxX; x++) {
-          const block = this.getBlock(new Position(x, y, z));
-          if (block) {
-            const str = block.toString();
-            line += str.padEnd(4);
-          } else {
-            line += ".   ";
-          }
+    for (const b of data.blocks || []) {
+      const pos = new Position(b.pos.x, b.pos.y, b.pos.z);
+      switch (b.type) {
+        case "solid": {
+          const block = new OpaqueBlock();
+          block.power = b.power ?? 0;
+          this.setBlock(pos, block);
+          break;
         }
-        lines.push(line);
+        case "lever": {
+          const attach = new Position(b.attachmentOffset.x, b.attachmentOffset.y, b.attachmentOffset.z);
+          const block = new Lever(attach);
+          block.on = !!b.on;
+          this.setBlock(pos, block);
+          break;
+        }
+        case "dust": {
+          const block = new RedstoneDust();
+          block.power = b.power ?? 0;
+          block.connectedDirs = new Set<string>(b.connectedDirs || []);
+          this.setBlock(pos, block);
+          break;
+        }
+        case "piston": {
+          const facing = new Position(b.facing.x, b.facing.y, b.facing.z);
+          const block = new Piston(facing);
+          block.extended = !!b.extended;
+          block.faceAdjPowered = !!b.faceAdjPowered;
+          this.setBlock(pos, block);
+          break;
+        }
       }
-      slices.push(lines.join("\n"));
     }
+  }
 
-    return slices.join("\n\n");
+  inspectBlock(block: Block): string {
+    const pos = this.findBlock(block);
+    const posStr = pos ? `${pos.x}, ${pos.y}, ${pos.z}` : "unknown";
+
+    const dirToString = (dir: Position): string => {
+      if (dir.x === 1) return "east";
+      if (dir.x === -1) return "west";
+      if (dir.y === 1) return "up";
+      if (dir.y === -1) return "down";
+      if (dir.z === 1) return "south";
+      if (dir.z === -1) return "north";
+      return "unknown";
+    };
+
+    switch (block.type) {
+      case "solid":
+        return `Solid Block\nPosition: ${posStr}\nPower: ${block.power}/15`;
+      case "lever":
+        const attachDir = dirToString(block.attachmentOffset);
+        return `Lever\nPosition: ${posStr}\nState: ${block.on ? "ON" : "off"}\nAttached to: ${attachDir}`;
+      case "dust": {
+        const dirs = Array.from(block.connectedDirs)
+          .map((d) => {
+            const [x, , z] = d.split(",").map(Number);
+            if (x === 1) return "east";
+            if (x === -1) return "west";
+            if (z === 1) return "south";
+            if (z === -1) return "north";
+            return "?";
+          })
+          .join(", ");
+        return `Redstone Dust\nPosition: ${posStr}\nPower: ${block.power}/15\nShape: ${dirs || "dot"}`;
+      }
+      case "piston":
+        const faceDir = dirToString(block.facing);
+        return `Piston\nPosition: ${posStr}\nState: ${block.extended ? "EXTENDED" : "retracted"}\nFacing: ${faceDir}`;
+    }
   }
 }
+
+// --- Types for serialization ---
+export type SerializedPosition = { x: number; y: number; z: number };
+
+export type SerializedSolid = {
+  type: "solid";
+  pos: SerializedPosition;
+  power: number;
+};
+
+export type SerializedLever = {
+  type: "lever";
+  pos: SerializedPosition;
+  on: boolean;
+  attachmentOffset: SerializedPosition;
+};
+
+export type SerializedDust = {
+  type: "dust";
+  pos: SerializedPosition;
+  power: number;
+  connectedDirs: string[];
+};
+
+export type SerializedPiston = {
+  type: "piston";
+  pos: SerializedPosition;
+  extended: boolean;
+  faceAdjPowered: boolean;
+  facing: SerializedPosition;
+};
+
+export type SerializedBlock = SerializedSolid | SerializedLever | SerializedDust | SerializedPiston;
+
+export type EngineSnapshot = {
+  tick: number;
+  blocks: SerializedBlock[];
+};

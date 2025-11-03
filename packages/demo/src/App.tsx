@@ -1,21 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
-import { Builder, Engine } from 'block';
-import { createRenderer } from './graphics';
+import { Builder, Engine, type Block, OpaqueBlock, RedstoneDust, Piston, Lever, Position, UP, DOWN } from 'block';
+import { Renderer } from './renderer';
 import { parseAndExecute } from './parser';
 import './App.css';
 
-const defaultCode = `solid
-save base
-move up
-lever down
-save myLever
-move east
-dust
-move east
-dust
-run
-toggle myLever
-run 5`;
+const defaultCode = ``;
+
+function initializeTestScene(engine: Engine, markers: Map<string, Block>) {
+  // 2-wide piston door test setup
+  const piston1 = new Piston(UP);
+  const piston2 = new Piston(UP);
+  engine.setBlock(new Position(0, 1, 0), piston1);
+  engine.setBlock(new Position(2, 1, 0), piston2);
+
+  const blockA = new OpaqueBlock();
+  const blockB = new OpaqueBlock();
+  engine.setBlock(new Position(0, 2, 0), blockA);
+  engine.setBlock(new Position(2, 2, 0), blockB);
+
+  engine.setBlock(new Position(1, 1, 0), new OpaqueBlock());
+
+  engine.setBlock(new Position(-1, -1, 0), new OpaqueBlock());
+  engine.setBlock(new Position(0, -1, 0), new OpaqueBlock());
+  engine.setBlock(new Position(1, -1, 0), new OpaqueBlock());
+
+  engine.setBlock(new Position(0, 0, 0), new RedstoneDust());
+  engine.setBlock(new Position(1, 0, 0), new RedstoneDust());
+  
+  const lever = new Lever(DOWN);
+  engine.setBlock(new Position(-1, 0, 0), lever);
+  markers.set('lever', lever);
+}
 
 function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -26,21 +41,31 @@ function App() {
   const [showLegend, setShowLegend] = useState(false);
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [popoverInfo, setPopoverInfo] = useState<{ name: string; info: string; x: number; y: number } | null>(null);
-  const engineRef = useRef<Engine>(new Engine());
-  const builderRef = useRef<Builder>(new Builder(engineRef.current));
+  const engineRef = useRef<Engine | null>(null);
+  const builderRef = useRef<Builder | null>(null);
+  const markersRef = useRef<Map<string, Block>>(new Map());
   const rendererRef = useRef<any>(null);
+  
+  if (!engineRef.current) {
+    engineRef.current = new Engine();
+    initializeTestScene(engineRef.current, markersRef.current);
+    builderRef.current = new Builder(engineRef.current);
+  }
+  
+  const [markers, setMarkers] = useState<Map<string, Block>>(() => new Map(markersRef.current));
 
   const engine = engineRef.current;
   const builder = builderRef.current;
 
   const executeCode = () => {
-    if (!canvasRef.current || !code.trim()) return;
+    if (!canvasRef.current || !code.trim() || !engine || !builder) return;
 
     try {
-      parseAndExecute(builder, code);
+      parseAndExecute(builder, code, markersRef.current);
+      setMarkers(new Map(markersRef.current));
 
       if (!rendererRef.current) {
-        const newRenderer = createRenderer(canvasRef.current, engine);
+        const newRenderer = new Renderer(canvasRef.current, engine);
         rendererRef.current = newRenderer;
       }
       
@@ -85,6 +110,9 @@ function App() {
   const handleReset = () => {
     engineRef.current = new Engine();
     builderRef.current = new Builder(engineRef.current);
+    markersRef.current = new Map();
+    initializeTestScene(engineRef.current, markersRef.current);
+    setMarkers(new Map(markersRef.current));
     setHistory([]);
     setCode('');
     setError('');
@@ -96,12 +124,14 @@ function App() {
 
   useEffect(() => {
     if (rendererRef.current && hoveredBlock) {
-      const block = builder.ref(hoveredBlock);
-      rendererRef.current.setHighlight(block);
+      const block = markers.get(hoveredBlock);
+      if (block) {
+        rendererRef.current.setHighlight(block);
+      }
     } else if (rendererRef.current) {
       rendererRef.current.setHighlight(null);
     }
-  }, [hoveredBlock]);
+  }, [hoveredBlock, markers]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', gap: '10px', padding: '10px', boxSizing: 'border-box' }}>
@@ -112,20 +142,22 @@ function App() {
           fontFamily: 'monospace', 
           fontSize: '12px'
         }}>
-          <div>Cursor: ({builder.getCursor().x}, {builder.getCursor().y}, {builder.getCursor().z})</div>
-          {Array.from(builder.getNamedBlocks().keys()).length > 0 && (
+          <div>Cursor: ({builder?.getCursor().x}, {builder?.getCursor().y}, {builder?.getCursor().z})</div>
+          {markers.size > 0 && (
             <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               <span>Named:</span>
-              {Array.from(builder.getNamedBlocks().keys()).map(name => (
+              {Array.from(markers.keys()).map((id) => (
                 <span 
-                  key={name}
+                  key={id}
                   onMouseEnter={(e) => {
-                    setHoveredBlock(name);
+                    setHoveredBlock(id);
                     try {
-                      const block = builder.ref(name);
-                      const info = builder.inspectBlock(block);
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setPopoverInfo({ name, info, x: rect.right + 10, y: rect.top });
+                      const block = markers.get(id);
+                      if (block && engineRef.current) {
+                        const info = engineRef.current.inspectBlock(block);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setPopoverInfo({ name: id, info, x: rect.right + 10, y: rect.top });
+                      }
                     } catch {}
                   }}
                   onMouseLeave={() => {
@@ -134,11 +166,11 @@ function App() {
                   }}
                   style={{ 
                     cursor: 'pointer', 
-                    textDecoration: hoveredBlock === name ? 'underline' : 'none',
-                    color: hoveredBlock === name ? '#ffaa00' : 'inherit'
+                    textDecoration: hoveredBlock === id ? 'underline' : 'none',
+                    color: hoveredBlock === id ? '#ffaa00' : 'inherit'
                   }}
                 >
-                  {name}
+                  {id}
                 </span>
               ))}
             </div>

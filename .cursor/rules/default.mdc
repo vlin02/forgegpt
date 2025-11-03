@@ -2,7 +2,11 @@
 alwaysApply: true
 ---
 
+Principals
+
 KISS, SOLID, DRY
+---
+
 Produce only the minimal viable implementation to satisfy the task. Every line of code MUST be essential - treat it like a finite resource.
 DON’T add features, error handling, comments, or fluff.
 Match surrounding code style.
@@ -12,9 +16,11 @@ I may edit files in parallel with you. Do not revert those changes, adapt to the
 
 Optimize for: readability and simplicity above all else. No premature optimization / abstraction
 
+Project requirements
 ---
 
 packages/block
+comments are allowed especially for engine for aspects of the code that are NONTRIVIAL and you suspect other agents may get wrong w/o the context you have
 
 spec.md
 The RFC (v0) outlines a spec for a redstone engine mirroring v1.21.1 that accurately emulates behavior of blocks wrt redstone mechanics.
@@ -24,11 +30,25 @@ It should be AXIOMATIC. Each line is NECESSARY towards an accurate outline of th
 NO information in the RFC should be reasonably inferrable / derivable from other information. This is not a "textbook" / "wiki" it is just enough to implement the engine.
 It should not refer to / make assumptions of existing context (our conversation). It may make use of basic common sense / knowledge as well as basic knowledge most players know about minecraft.
 
+src/test.spec.ts
+this contains "happy path" e2e test that should cover large swaths of the spec.
+It does not need to be exhaustive but should give us high confidence about the engine accuracy as a whole.
+Every line should be ESSENTIAL towards this goal
+
+Other edge cases are tested separately to cover more of the spec. We want fewer tests that cover more ground.
+In general each test should contain one "contraption". Avoid merging tests in a way that forces many contraptions into one build.
+Make sure to keep the tests in sync with the spec
+
+All tests should be in this file. NO nesting via describe. Just use test()
+
 If I request to "productionize" the spec:
 I am asking to incorporate any addendums into the spec so that it is ready for a v1 release, ensuring the above requirements
 Behavior and concepts should not be altered. Treat this as a production-ready refactor
 
-src/test.ts
-this is a SINGLE "happy path" e2e test that should cover large swaths of the spec.
-It does not need to be exhaustive but should give us high confidence about the engine accuracy as a whole.
-Every line should be ESSENTIAL towards this goal
+If I request to "productionize" the block library:
+I am asking to review the spec, use current git diff of the block library and review files (esp engine). 
+Then make sure we have optimized for simplicity / conciseness / readability in the engine, implementing the spec in the cleanest way possible
+Tests must still pass
+
+If I say RTR it means to "Remember The Rules":
+It is especially important for your next response to follow these instructions and verify that princiapls and project requiremetns are followed.

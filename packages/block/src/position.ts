@@ -17,8 +17,16 @@ export class Position {
     return new Position(this.x * scalar, this.y * scalar, this.z * scalar);
   }
 
+  copy(): Position {
+    return new Position(this.x, this.y, this.z);
+  }
+
   toKey(): string {
     return `${this.x},${this.y},${this.z}`;
+  }
+
+  equals(other: Position): boolean {
+    return this.x === other.x && this.y === other.y && this.z === other.z;
   }
 
   static fromKey(key: string): Position {
@@ -35,4 +43,4 @@ export const UP = new Position(0, 1, 0);
 export const DOWN = new Position(0, -1, 0);
 
 export const HORIZONTAL_OFFSETS: Position[] = [NORTH, SOUTH, EAST, WEST];
-export const NEIGHBOR_OFFSETS: Position[] = [...HORIZONTAL_OFFSETS, UP, DOWN];
+export const NEIGHBOR_OFFSETS: Position[] = [NORTH, SOUTH, EAST, WEST, UP, DOWN];
