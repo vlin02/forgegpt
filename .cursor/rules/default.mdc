@@ -3,9 +3,9 @@ alwaysApply: true
 ---
 
 Principals
+---
 
 KISS, SOLID, DRY
----
 
 Produce only the minimal viable implementation to satisfy the task. Every line of code MUST be essential - treat it like a finite resource.
 DON’T add features, error handling, comments, or fluff.
@@ -13,7 +13,6 @@ Match surrounding code style.
 Explain like I’m a junior engineer
 No long summaries; be succinct.
 I may edit files in parallel with you. Do not revert those changes, adapt to them.
-
 Optimize for: readability and simplicity above all else. No premature optimization / abstraction
 
 Project requirements
@@ -52,3 +51,7 @@ Tests must still pass
 
 If I say RTR it means to "Remember The Rules":
 It is especially important for your next response to follow these instructions and verify that princiapls and project requiremetns are followed.
+
+Workflow
+---
+Prefer to use tsx for one off scripts you want to run

@@ -1,6 +1,7 @@
 import { Position, DOWN, UP, NEIGHBOR_OFFSETS, HORIZONTAL_OFFSETS } from "./position.js";
 import type { Block } from "./blocks.js";
 import { Lever, Piston, RedstoneDust, OpaqueBlock } from "./blocks.js";
+import LZString from "lz-string";
 
 type PendingMove = {
   from: Position;
@@ -17,6 +18,17 @@ export class Engine {
   setBlock(pos: Position, block: Block): boolean {
     const existing = this.getBlock(pos);
     if (existing) return false;
+    
+    // Validate placement rules per spec
+    if (block.type === "lever") {
+      const attachPos = pos.add(block.attachmentOffset);
+      const attachBlock = this.getBlock(attachPos);
+      if (!attachBlock || attachBlock.type !== "solid") return false;
+    } else if (block.type === "dust") {
+      const supportPos = pos.add(DOWN);
+      const supportBlock = this.getBlock(supportPos);
+      if (!supportBlock || supportBlock.type !== "solid") return false;
+    }
     
     this.blocks.set(pos.toKey(), block);
     this.positions.set(block, pos);
@@ -450,6 +462,18 @@ export class Engine {
         }
       }
     }
+  }
+
+  toURL(): string {
+    const json = JSON.stringify(this.toJSON());
+    return LZString.compressToEncodedURIComponent(json);
+  }
+
+  static fromURL(encoded: string): Engine {
+    const json = LZString.decompressFromEncodedURIComponent(encoded);
+    if (!json) throw new Error("Invalid URL");
+    const snapshot = JSON.parse(json);
+    return Engine.fromJSON(snapshot);
   }
 
   inspectBlock(block: Block): string {

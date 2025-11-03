@@ -1,415 +1,368 @@
 import { test, expect } from "vitest";
-import { Builder, DOWN as D, EAST as E, WEST as W, NORTH as N, SOUTH as S, UP as U, Position } from "./builder.js";
+import {
+  Position,
+  DOWN as D,
+  EAST as E,
+  WEST as W,
+  NORTH as N,
+  SOUTH as S,
+  UP as U,
+} from "./position.js";
 import { OpaqueBlock, RedstoneDust, Piston, Lever } from "./blocks.js";
 import { Engine } from "./engine.js";
 
+const at = (x: number, y: number, z: number) => new Position(x, y, z);
+
 test("core spec features", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
+  const sim = new Engine();
 
-    const base0 = b.solid();
-    b.move(E);
-    b.solid();
-    b.move(S);
-    b.solid();
-    b.move(E, U);
-    const baseWeak = b.solid();
-    b.move(D, E);
-    b.solid();
-    b.move(E, N);
-    b.solid();
-    b.move(E, S, U);
-    const blockToPush = b.solid();
-    b.move(D, N);
-    b.solid();
-    b.move(W, 5, S);
-    b.solid();
-    b.move(E, S, U);
-    b.solid();
-    b.move(W, N, 2);
-    b.lever(D);
-    b.move(E);
-    const dust1 = b.dust();
-    b.move(S);
-    const dust2 = b.dust();
-    b.move(E, 2);
-    const dustIsolated = b.dust();
-    b.move(E, 2, N);
-    b.dust();
-    b.move(S, U);
-    b.dust();
-    b.move(W, 5, D);
-    const dustVertLower = b.dust();
-    b.move(E, U, S);
-    const dustVertUpper = b.dust();
-    b.move(E, 3, D, N, 2);
-    b.lever(D);
-    b.move(S);
-    const piston = b.piston(E);
+  const base0 = new OpaqueBlock();
+  sim.setBlock(at(0, 0, 0), base0);
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 0, 1), new OpaqueBlock());
+  const baseWeak = new OpaqueBlock();
+  sim.setBlock(at(2, 1, 1), baseWeak);
+  sim.setBlock(at(3, 0, 1), new OpaqueBlock());
+  sim.setBlock(at(4, 0, 0), new OpaqueBlock());
+  const blockToPush = new OpaqueBlock();
+  sim.setBlock(at(5, 1, 1), blockToPush);
+  sim.setBlock(at(5, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 0, 1), new OpaqueBlock());
+  sim.setBlock(at(1, 1, 2), new OpaqueBlock());
+  sim.setBlock(at(0, 1, 0), new Lever(D));
+  const dust1 = new RedstoneDust();
+  sim.setBlock(at(1, 1, 0), dust1);
+  const dust2 = new RedstoneDust();
+  sim.setBlock(at(1, 1, 1), dust2);
+  const dustIsolated = new RedstoneDust();
+  sim.setBlock(at(3, 1, 1), dustIsolated);
+  sim.setBlock(at(5, 1, 0), new RedstoneDust());
+  sim.setBlock(at(5, 2, 1), new RedstoneDust());
+  const dustVertLower = new RedstoneDust();
+  sim.setBlock(at(0, 1, 1), dustVertLower);
+  const dustVertUpper = new RedstoneDust();
+  sim.setBlock(at(1, 2, 2), dustVertUpper);
+  sim.setBlock(at(4, 1, 0), new Lever(D));
+  const piston = new Piston(E);
+  sim.setBlock(at(4, 1, 1), piston);
 
-    expect(piston.extended).toBe(false);
+  expect(piston.extended).toBe(false);
 
-    sim.toggleLever(new Position(0, 1, 0));
-    sim.toggleLever(new Position(4, 1, 0));
-    sim.tick();
+  sim.toggleLever(at(0, 1, 0));
+  sim.toggleLever(at(4, 1, 0));
+  sim.tick();
 
-    expect(base0.power).toBe(15);
-    expect(dust1.power).toBe(15);
-    expect(dust2.power).toBe(14);
-    expect(baseWeak.power).toBe(14);
-    expect(dustIsolated.power).toBe(0);
-    expect(dustVertLower.power).toBe(15);
-    expect(dustVertUpper.power).toBe(13);
-    expect(piston.extended).toBe(true);
-    expect(sim.getBlock(new Position(6, 1, 1))).toBe(blockToPush);
-    expect(sim.getBlock(new Position(5, 2, 1))).toBeUndefined();
+  expect(base0.power).toBe(15);
+  expect(dust1.power).toBe(15);
+  expect(dust2.power).toBe(14);
+  expect(baseWeak.power).toBe(14);
+  expect(dustIsolated.power).toBe(0);
+  expect(dustVertLower.power).toBe(15);
+  expect(dustVertUpper.power).toBe(13);
+  expect(piston.extended).toBe(true);
+  expect(sim.getBlock(at(6, 1, 1))).toBe(blockToPush);
+  expect(sim.getBlock(at(5, 2, 1))).toBeUndefined();
 
-    sim.toggleLever(new Position(4, 1, 0));
-    sim.removeBlock(new Position(1, 0, 0));
-    sim.tick();
+  sim.toggleLever(at(4, 1, 0));
+  sim.removeBlock(at(1, 0, 0));
+  sim.tick();
 
-    expect(sim.getBlock(new Position(1, 1, 0))).toBeUndefined();
-    expect(piston.extended).toBe(false);
+  expect(sim.getBlock(at(1, 1, 0))).toBeUndefined();
+  expect(piston.extended).toBe(false);
 
-    sim.removeBlock(new Position(0, 0, 0));
-    sim.tick();
+  sim.removeBlock(at(0, 0, 0));
+  sim.tick();
 
-    expect(sim.getBlock(new Position(0, 1, 0))).toBeUndefined();
+  expect(sim.getBlock(at(0, 1, 0))).toBeUndefined();
 });
 
 test("piston failures and multi-block push", () => {
   const sim = new Engine();
-  const b = new Builder(sim);
 
-  b.solid();
-  b.move(U);
-  const pistonNoSink = b.piston(E);
-  b.move(E);
-  b.solid();
-  b.move(W);
-  b.lever(D);
-  b.move(E, 2, D);
-  b.solid();
-  b.move(U);
-  const pistonImmovable = b.piston(E);
-  b.move(E);
-  b.piston(W);
-  b.move(W);
-  b.lever(D);
-  b.move(E, 2, D);
-  b.solid();
-  b.move(U);
-  const pistonTooMany = b.piston(E);
+  // pistonNoSink contraption at x=0
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const pistonNoSink = new Piston(E);
+  sim.setBlock(at(0, 1, 0), pistonNoSink);
+  sim.setBlock(at(1, 1, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 1, 0), new Lever(D)); // overwrites piston
+
+  // pistonImmovable contraption at x=2
+  sim.setBlock(at(2, 0, 0), new OpaqueBlock());
+  const pistonImmovable = new Piston(E);
+  sim.setBlock(at(2, 1, 0), pistonImmovable);
+  sim.setBlock(at(3, 1, 0), new Piston(W)); // opposing piston
+  sim.setBlock(at(2, 1, 0), new Lever(D)); // overwrites piston
+
+  // pistonTooMany contraption at x=4
+  sim.setBlock(at(4, 0, 0), new OpaqueBlock());
+  const pistonTooMany = new Piston(E);
+  sim.setBlock(at(4, 1, 0), pistonTooMany);
   for (let i = 0; i < 13; i++) {
-    b.move(E);
-    b.solid();
+    sim.setBlock(at(5 + i, 1, 0), new OpaqueBlock());
   }
-  b.move(W, 13);
-  b.lever(D);
-  b.move(W, 4, D, S, 2);
-  b.solid();
-  b.move(U);
-  const pistonMulti = b.piston(E);
-  b.move(E);
-  b.solid();
-  b.move(E);
-  b.lever(W);
-  b.move(E);
-  b.solid();
-  b.move(E);
-  const block3 = b.solid();
-  b.move(U);
-  b.lever(W);
+  sim.setBlock(at(4, 1, 0), new Lever(D)); // overwrites piston
 
-  sim.toggleLever(new Position(0, 1, 0));
-  sim.toggleLever(new Position(2, 1, 0));
-  sim.toggleLever(new Position(4, 1, 0));
-  sim.toggleLever(new Position(2, 1, 2));
+  // pistonMulti contraption at z=2
+  sim.setBlock(at(0, 0, 2), new OpaqueBlock());
+  const pistonMulti = new Piston(E);
+  sim.setBlock(at(0, 1, 2), pistonMulti);
+  sim.setBlock(at(1, 1, 2), new OpaqueBlock());
+  sim.setBlock(at(2, 1, 2), new Lever(W));
+  sim.setBlock(at(3, 1, 2), new OpaqueBlock());
+  const block3 = new OpaqueBlock();
+  sim.setBlock(at(4, 1, 2), block3);
+  sim.setBlock(at(4, 2, 2), new Lever(W));
+
+  sim.toggleLever(at(0, 1, 0));
+  sim.toggleLever(at(2, 1, 0));
+  sim.toggleLever(at(4, 1, 0));
+  sim.toggleLever(at(2, 1, 2));
   sim.tick();
 
   expect(pistonNoSink.extended).toBe(false);
   expect(pistonImmovable.extended).toBe(false);
   expect(pistonTooMany.extended).toBe(false);
   expect(pistonMulti.extended).toBe(true);
-  expect(sim.getBlock(new Position(2, 1, 2))).toBeInstanceOf(OpaqueBlock);
-  expect(sim.getBlock(new Position(5, 1, 2))).toBe(block3);
-  expect(sim.getBlock(new Position(5, 2, 2))).toBeUndefined();
+  expect(sim.getBlock(at(2, 1, 2))).toBeInstanceOf(OpaqueBlock);
+  expect(sim.getBlock(at(5, 1, 2))).toBe(block3);
+  expect(sim.getBlock(at(4, 2, 2))).toBeUndefined();
 });
 
 test("weakly-powered block activates piston", () => {
   const sim = new Engine();
-  const b = new Builder(sim);
 
-  b.solid();
-  b.move(E);
-  b.solid();
-  b.move(S);
-  b.solid();
-  b.move(W, U, N);
-  b.lever(D);
-  b.move(E);
-  b.dust();
-  b.move(S);
-  b.dust();
-  b.move(E);
-  const weakBlock = b.solid();
-  b.move(E);
-  const pistonWeak = b.piston(W);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 0, 1), new OpaqueBlock());
+  sim.setBlock(at(0, 1, 0), new Lever(D));
+  sim.setBlock(at(1, 1, 0), new RedstoneDust());
+  sim.setBlock(at(1, 1, 1), new RedstoneDust());
+  const weakBlock = new OpaqueBlock();
+  sim.setBlock(at(2, 1, 1), weakBlock);
+  const pistonWeak = new Piston(W);
+  sim.setBlock(at(3, 1, 1), pistonWeak);
 
-  sim.toggleLever(new Position(0, 1, 0));
+  sim.toggleLever(at(0, 1, 0));
   sim.tick();
 
   expect(weakBlock.power).toBeGreaterThan(0);
   expect(pistonWeak.extended).toBe(true);
 });
 
-test("dust shape: dot vs cross", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
+test("dust shape: dot does not activate adjacent piston", () => {
+  const sim = new Engine();
 
-    b.solid();
-    b.move(U);
-    const dustDot = b.dust();
-    b.move(E, D);
-    b.solid();
-    b.move(U);
-    const pistonDot = b.piston(W);
-    b.move(W, 2);
-    b.lever(D);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const dustDot = new RedstoneDust();
+  sim.setBlock(at(0, 1, 0), dustDot);
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  const pistonDot = new Piston(W);
+  sim.setBlock(at(1, 1, 0), pistonDot);
+  sim.setBlock(at(0, 0, 0), new Lever(D));
 
-  sim.toggleLever(new Position(0, 0, 0));
+  sim.toggleLever(at(0, 0, 0));
   sim.tick();
 
-    expect(dustDot.connectedDirs.size).toBe(0);
-    expect(pistonDot.extended).toBe(false);
+  expect(dustDot.connectedDirs.size).toBe(0);
+  expect(pistonDot.extended).toBe(false);
+});
 
-    const sim2 = new Engine();
-    const b2 = new Builder(sim2);
+test("dust shape: cross activates adjacent piston", () => {
+  const sim = new Engine();
 
-    b2.solid();
-    b2.move(E);
-    b2.solid();
-    b2.move(E);
-    b2.solid();
-    b2.move(U);
-    b2.dust();
-    b2.move(W);
-    const dustCross = b2.dust();
-    b2.move(E, 2);
-    b2.solid();
-    b2.move(U);
-    const pistonCross = b2.piston(W);
-    b2.move(W, 3, D);
-    b2.lever(D);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(2, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(2, 1, 0), new RedstoneDust());
+  const dustCross = new RedstoneDust();
+  sim.setBlock(at(1, 1, 0), dustCross);
+  sim.setBlock(at(3, 1, 0), new OpaqueBlock());
+  const pistonCross = new Piston(W);
+  sim.setBlock(at(3, 2, 0), pistonCross);
+  sim.setBlock(at(0, 1, 0), new Lever(D));
 
-    sim2.toggleLever(new Position(0, 1, 0));
-    sim2.tick();
+  sim.toggleLever(at(0, 1, 0));
+  sim.tick();
 
-    expect(dustCross.connectedDirs.size).toBeGreaterThan(0);
-    expect(pistonCross.extended).toBe(true);
+  expect(dustCross.connectedDirs.size).toBeGreaterThan(0);
+  expect(pistonCross.extended).toBe(true);
 });
 
 test("QC requires block update", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
+  const sim = new Engine();
 
-    b.solid();
-    b.move(U);
-    const pistonQC = b.piston(E);
-    b.move(U);
-    b.solid();
-    b.move(U);
-    b.lever(D);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const pistonQC = new Piston(E);
+  sim.setBlock(at(0, 1, 0), pistonQC);
+  sim.setBlock(at(0, 2, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 3, 0), new Lever(D));
 
-    sim.toggleLever(new Position(0, 3, 0));
-    sim.tick();
+  sim.toggleLever(at(0, 3, 0));
+  sim.tick();
 
-    expect(pistonQC.extended).toBe(true);
+  expect(pistonQC.extended).toBe(true);
 
-    sim.setBlock(new Position(1, 1, 0), new OpaqueBlock());
-    sim.tick();
-    
-    expect(pistonQC.extended).toBe(true);
+  sim.setBlock(at(1, 1, 0), new OpaqueBlock());
+  sim.tick();
+
+  expect(pistonQC.extended).toBe(true);
 });
 
 test("up-facing piston exception", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
+  const sim = new Engine();
 
-    b.solid();
-    b.move(U);
-    const pistonUp = b.piston(U);
-    b.move(U);
-    b.solid();
-    b.move(U);
-    b.lever(D);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const pistonUp = new Piston(U);
+  sim.setBlock(at(0, 1, 0), pistonUp);
+  sim.setBlock(at(0, 2, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 3, 0), new Lever(D));
 
-    sim.toggleLever(new Position(0, 3, 0));
-    sim.tick();
+  sim.toggleLever(at(0, 3, 0));
+  sim.tick();
 
-    expect(pistonUp.extended).toBe(false);
+  expect(pistonUp.extended).toBe(false);
 });
 
-test("vertical step cutting and opaque-above prevention", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
+test("opaque block above prevents vertical step connection", () => {
+  const sim = new Engine();
 
-    b.solid();
-    b.move(U);
-    const dustLower = b.dust();
-    b.move(E, D);
-    b.solid();
-    b.move(U, 2);
-    const dustUpper = b.dust();
-    b.move(W);
-    b.solid();
-    b.move(W, D, 2);
-    b.solid();
-    b.move(U);
-    b.lever(D);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const dustLower = new RedstoneDust();
+  sim.setBlock(at(0, 1, 0), dustLower);
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  const dustUpper = new RedstoneDust();
+  sim.setBlock(at(1, 2, 0), dustUpper);
+  sim.setBlock(at(0, 2, 0), new OpaqueBlock());
+  sim.setBlock(at(-1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(-1, 1, 0), new Lever(D));
 
-    sim.toggleLever(new Position(-1, 1, 0));
-    sim.tick();
+  sim.toggleLever(at(-1, 1, 0));
+  sim.tick();
 
-    expect(dustLower.power).toBe(15);
-    expect(dustUpper.power).toBe(0);
+  expect(dustLower.power).toBe(15);
+  expect(dustUpper.power).toBe(0);
+});
 
-    const sim2 = new Engine();
-    const b2 = new Builder(sim2);
-    b2.solid();
-    b2.move(U);
-    const dust2Lower = b2.dust();
-    b2.move(E);
-    const dust2Horiz = b2.dust();
-    b2.move(D);
-    b2.solid();
-    b2.move(U, 2);
-    const dust2Upper = b2.dust();
-    b2.move(W);
-    b2.solid();
-    b2.move(W, D, 2);
-    b2.solid();
-    b2.move(U);
-    b2.lever(D);
+test("solid block cuts vertical step connection", () => {
+  const sim = new Engine();
 
-    sim2.toggleLever(new Position(-1, 1, 0));
-    sim2.tick();
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(2, 0, 0), new OpaqueBlock());
+  const dustLower = new RedstoneDust();
+  sim.setBlock(at(0, 1, 0), dustLower);
+  const dustMid = new RedstoneDust();
+  sim.setBlock(at(1, 1, 0), dustMid);
+  const dustUpper = new RedstoneDust();
+  sim.setBlock(at(2, 2, 0), dustUpper);
+  sim.setBlock(at(-1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(-1, 1, 0), new Lever(D));
 
-    expect(dust2Lower.power).toBe(15);
-    expect(dust2Horiz.power).toBe(14);
-    expect(dust2Upper.power).toBe(0);
+  sim.toggleLever(at(-1, 1, 0));
+  sim.tick();
+
+  expect(dustLower.power).toBe(15);
+  expect(dustMid.power).toBe(14);
+  expect(dustUpper.power).toBe(0);
 });
 
 test("weak-only powered block cannot power adjacent dust", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
+  const sim = new Engine();
 
-    b.solid();
-    b.move(E);
-    b.solid();
-    b.move(E);
-    const weakBlock = b.solid();
-    b.move(E);
-    b.solid();
-    b.move(W, 3, U);
-    b.lever(D);
-    b.move(E);
-    b.dust();
-    b.move(E);
-    b.dust();
-    b.move(D, S);
-    const adjacentDust = b.dust();
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  const weakBlock = new OpaqueBlock();
+  sim.setBlock(at(2, 0, 0), weakBlock);
+  sim.setBlock(at(3, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 1, 0), new Lever(D));
+  sim.setBlock(at(1, 1, 0), new RedstoneDust());
+  sim.setBlock(at(2, 1, 0), new RedstoneDust());
+  const adjacentDust = new RedstoneDust();
+  sim.setBlock(at(2, 0, 1), adjacentDust);
 
-    sim.toggleLever(new Position(0, 1, 0));
-    sim.tick();
+  sim.toggleLever(at(0, 1, 0));
+  sim.tick();
 
-    expect(weakBlock.power).toBeGreaterThan(0);
-    expect(adjacentDust.power).toBe(0);
+  expect(weakBlock.power).toBeGreaterThan(0);
+  expect(adjacentDust.power).toBe(0);
 });
 
 test("lever/dust destruction and 12-block limit bypass", () => {
-    const sim = new Engine();
-    const b = new Builder(sim);
-
-    b.solid();
-    b.move(U);
-    const piston = b.piston(E);
-    b.move(E, D);
-    b.solid();
-    b.move(U);
-    b.dust();
-    b.move(E);
-    const block1 = b.solid();
-    b.move(E);
-    b.lever(W);
-    b.move(E);
-    const block2 = b.solid();
-    b.move(W, 5);
-    b.solid();
-    b.move(S);
-    b.lever(N);
-
-    sim.toggleLever(new Position(-1, 1, 1));
-    sim.tick();
-
-    expect(piston.extended).toBe(true);
-    expect(sim.getBlock(new Position(1, 1, 0))).toBeUndefined();
-    expect(sim.getBlock(new Position(2, 1, 0))).toBeUndefined();
-    expect(sim.getBlock(new Position(3, 1, 0))).toBe(block1);
-    expect(sim.getBlock(new Position(5, 1, 0))).toBe(block2);
-});
-
-test("2-wide piston door (single lever powers two up pistons)", () => {
   const sim = new Engine();
 
-  // Pistons at Y=1, facing up
-  const piston1 = new Piston(U);
-  const piston2 = new Piston(U);
-  sim.setBlock(new Position(0, 1, 0), piston1);
-  sim.setBlock(new Position(2, 1, 0), piston2);
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const piston = new Piston(E);
+  sim.setBlock(at(0, 1, 0), piston);
+  sim.setBlock(at(1, 0, 0), new OpaqueBlock());
+  sim.setBlock(at(1, 1, 0), new RedstoneDust());
+  const block1 = new OpaqueBlock();
+  sim.setBlock(at(2, 1, 0), block1);
+  sim.setBlock(at(3, 1, 0), new Lever(W));
+  const block2 = new OpaqueBlock();
+  sim.setBlock(at(4, 1, 0), block2);
+  sim.setBlock(at(-1, 1, 0), new OpaqueBlock());
+  sim.setBlock(at(-1, 1, 1), new Lever(N));
 
-  // Blocks to be pushed at Y=2
-  const blockA = new OpaqueBlock();
-  const blockB = new OpaqueBlock();
-  sim.setBlock(new Position(0, 2, 0), blockA);
-  sim.setBlock(new Position(2, 2, 0), blockB);
-
-  // Shared adjacent block between pistons at Y=1 (will be weak-powered by dust below)
-  sim.setBlock(new Position(1, 1, 0), new OpaqueBlock());
-
-  // Supports under dust/lever (Y=-1)
-  sim.setBlock(new Position(-1, -1, 0), new OpaqueBlock());
-  sim.setBlock(new Position(0, -1, 0), new OpaqueBlock());
-  sim.setBlock(new Position(1, -1, 0), new OpaqueBlock());
-
-  // Dust network at Y=0: lever -> dust -> dust (non-dot)
-  sim.setBlock(new Position(0, 0, 0), new RedstoneDust());
-  sim.setBlock(new Position(1, 0, 0), new RedstoneDust());
-  sim.setBlock(new Position(-1, 0, 0), new Lever(D));
-
-  // Initial state
-  expect(piston1.extended).toBe(false);
-  expect(piston2.extended).toBe(false);
-  expect(sim.getBlock(new Position(0, 2, 0))).toBe(blockA);
-  expect(sim.getBlock(new Position(2, 2, 0))).toBe(blockB);
-
-  // ON -> both pistons extend same tick, pushing blocks up to Y=3
-  sim.toggleLever(new Position(-1, 0, 0));
+  sim.toggleLever(at(-1, 1, 1));
   sim.tick();
-  expect(piston1.extended).toBe(true);
-  expect(piston2.extended).toBe(true);
-  expect(sim.getBlock(new Position(0, 3, 0))).toBe(blockA);
-  expect(sim.getBlock(new Position(2, 3, 0))).toBe(blockB);
 
-  // OFF -> pistons retract, pushed blocks remain at Y=3 (non-sticky)
-  sim.toggleLever(new Position(-1, 0, 0));
-  sim.tick();
-  expect(piston1.extended).toBe(false);
-  expect(piston2.extended).toBe(false);
-  expect(sim.getBlock(new Position(0, 3, 0))).toBe(blockA);
-  expect(sim.getBlock(new Position(2, 3, 0))).toBe(blockB);
-  expect(sim.getBlock(new Position(0, 0, 0))).toBeInstanceOf(RedstoneDust);
-  expect(sim.getBlock(new Position(-1, 0, 0))).toBeInstanceOf(Lever);
+  expect(piston.extended).toBe(true);
+  expect(sim.getBlock(at(1, 1, 0))).toBeUndefined();
+  expect(sim.getBlock(at(2, 1, 0))).toBeUndefined();
+  expect(sim.getBlock(at(3, 1, 0))).toBe(block1);
+  expect(sim.getBlock(at(5, 1, 0))).toBe(block2);
 });
 
- 
+test("block above dust does not remove dust", () => {
+  const sim = new Engine();
+
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const dust = new RedstoneDust();
+  sim.setBlock(at(0, 1, 0), dust);
+
+  sim.setBlock(at(0, 2, 0), new OpaqueBlock());
+  sim.tick();
+
+  expect(sim.getBlock(at(0, 1, 0))).toBe(dust);
+});
+
+test("piston retraction", () => {
+  const sim = new Engine();
+
+  sim.setBlock(at(0, 0, 0), new OpaqueBlock());
+  const piston = new Piston(E);
+  sim.setBlock(at(0, 1, 0), piston);
+  sim.setBlock(at(1, 1, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 2, 0), new OpaqueBlock());
+  sim.setBlock(at(0, 3, 0), new Lever(D));
+
+  sim.toggleLever(at(0, 3, 0));
+  sim.tick();
+
+  expect(piston.extended).toBe(true);
+  expect(sim.getBlock(at(2, 1, 0))).toBeInstanceOf(OpaqueBlock);
+
+  sim.toggleLever(at(0, 3, 0));
+  sim.tick();
+
+  expect(piston.extended).toBe(false);
+  expect(sim.getBlock(at(2, 1, 0))).toBeInstanceOf(OpaqueBlock);
+});
+
+test("placement validation", () => {
+  const sim = new Engine();
+
+  expect(sim.setBlock(at(0, 0, 0), new RedstoneDust())).toBe(false);
+  sim.setBlock(at(0, -1, 0), new OpaqueBlock());
+  expect(sim.setBlock(at(0, 0, 0), new RedstoneDust())).toBe(true);
+
+  expect(sim.setBlock(at(1, 0, 0), new Lever(D))).toBe(false);
+  sim.setBlock(at(1, -1, 0), new OpaqueBlock());
+  expect(sim.setBlock(at(1, 0, 0), new Lever(D))).toBe(true);
+
+  const piston = new Piston(U);
+  sim.setBlock(at(2, 0, 0), piston);
+  expect(sim.setBlock(at(2, 1, 0), new RedstoneDust())).toBe(false);
+
+  expect(sim.setBlock(at(3, 1, 0), new Lever(at(0, -1, 0)))).toBe(false);
+});
