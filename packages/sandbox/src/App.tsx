@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Builder, Engine } from 'block';
-import { Renderer } from './renderer';
+import { Renderer } from './renderer.js';
 import './App.css';
 
 function App() {
