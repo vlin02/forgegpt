@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsc",
     "snapshot": "tsx src/generate-snapshot.ts",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",

@@ -464,17 +464,6 @@ export class Engine {
     }
   }
 
-  toURL(): string {
-    const json = JSON.stringify(this.toJSON());
-    return LZString.compressToEncodedURIComponent(json);
-  }
-
-  static fromURL(encoded: string): Engine {
-    const json = LZString.decompressFromEncodedURIComponent(encoded);
-    if (!json) throw new Error("Invalid URL");
-    const snapshot = JSON.parse(json);
-    return Engine.fromJSON(snapshot);
-  }
 
   inspectBlock(block: Block): string {
     const pos = this.findBlock(block);

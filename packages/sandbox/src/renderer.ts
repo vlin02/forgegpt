@@ -21,6 +21,7 @@ export class Renderer {
 
   private meshes = new Map<string, { mesh: THREE.Mesh; material: THREE.MeshLambertMaterial }>();
   private leverMeshes = new Map<string, { group: THREE.Group; stick: THREE.Mesh; stickMaterial: THREE.MeshLambertMaterial }>();
+  private pistonMeshes = new Map<string, { group: THREE.Group; face: THREE.Mesh; faceMaterial: THREE.MeshLambertMaterial }>();
   private dustMeshes = new Map<string, THREE.Group>();
   private cursorEdges: THREE.BoxHelper;
 
@@ -183,6 +184,9 @@ export class Renderer {
         case "lever":
           this.updateLever(key, block, pos, isHighlighted);
           break;
+        case "piston":
+          this.updatePiston(key, block, pos, isHighlighted);
+          break;
         case "dust":
           this.updateDust(key, block, pos, color, isHighlighted);
           break;
@@ -194,9 +198,62 @@ export class Renderer {
     this.cleanupRemovedBlocks(currentBlocks);
   }
 
+  private updatePiston(key: string, block: any, pos: Position, isHighlighted: boolean): void {
+    const cached = this.pistonMeshes.get(key);
+    const faceColor = isHighlighted ? HIGHLIGHT_COLOR : (block.extended ? 0xffaa00 : 0x8b6914);
+
+    if (!cached) {
+      const group = new THREE.Group();
+      const faceMaterial = this.createMaterial(faceColor);
+      
+      // Create base and face based on piston facing direction
+      const facing = block.facing;
+      let baseGeometry: THREE.BoxGeometry;
+      let basePosition: THREE.Vector3;
+      let faceGeometry: THREE.BoxGeometry;
+      let facePosition: THREE.Vector3;
+      
+      const basePercent = 0.85;
+      const facePercent = 0.15;
+      
+      if (facing.x !== 0) {
+        // East/West facing - base 85%, face 15%
+        baseGeometry = new THREE.BoxGeometry(basePercent, 1, 1);
+        basePosition = new THREE.Vector3(-facing.x * (0.5 - basePercent / 2), 0, 0);
+        faceGeometry = new THREE.BoxGeometry(facePercent, 1, 1);
+        facePosition = new THREE.Vector3(facing.x * (0.5 - facePercent / 2), 0, 0);
+      } else if (facing.y !== 0) {
+        // Up/Down facing - base 85%, face 15%
+        baseGeometry = new THREE.BoxGeometry(1, basePercent, 1);
+        basePosition = new THREE.Vector3(0, -facing.y * (0.5 - basePercent / 2), 0);
+        faceGeometry = new THREE.BoxGeometry(1, facePercent, 1);
+        facePosition = new THREE.Vector3(0, facing.y * (0.5 - facePercent / 2), 0);
+      } else {
+        // North/South facing - base 85%, face 15%
+        baseGeometry = new THREE.BoxGeometry(1, 1, basePercent);
+        basePosition = new THREE.Vector3(0, 0, -facing.z * (0.5 - basePercent / 2));
+        faceGeometry = new THREE.BoxGeometry(1, 1, facePercent);
+        facePosition = new THREE.Vector3(0, 0, facing.z * (0.5 - facePercent / 2));
+      }
+      
+      const base = new THREE.Mesh(baseGeometry, this.createMaterial(0x808080));
+      base.position.copy(basePosition);
+      
+      const face = new THREE.Mesh(faceGeometry, faceMaterial);
+      face.position.copy(facePosition);
+
+      group.add(base, face);
+      group.position.set(pos.x, pos.y, pos.z);
+      this.scene.add(group);
+      this.pistonMeshes.set(key, { group, face, faceMaterial });
+    } else {
+      cached.faceMaterial.color.setHex(faceColor);
+    }
+  }
+
   private updateLever(key: string, block: any, pos: Position, isHighlighted: boolean): void {
     const cached = this.leverMeshes.get(key);
-    const stickColor = isHighlighted ? HIGHLIGHT_COLOR : (block.on ? 0x8b4513 : 0x654321);
+    const stickColor = isHighlighted ? HIGHLIGHT_COLOR : (block.on ? 0xffaa00 : 0x654321);
 
     if (!cached) {
       const group = new THREE.Group();
@@ -269,6 +326,14 @@ export class Renderer {
       }
     }
 
+    for (const [key, cached] of this.pistonMeshes) {
+      if (!currentBlocks.has(key)) {
+        this.scene.remove(cached.group);
+        this.disposeGroup(cached.group);
+        this.pistonMeshes.delete(key);
+      }
+    }
+
     for (const [key, group] of this.dustMeshes) {
       if (!currentBlocks.has(key)) {
         this.scene.remove(group);
@@ -326,6 +391,12 @@ export class Renderer {
       this.disposeGroup(cached.group);
     }
     this.leverMeshes.clear();
+
+    for (const cached of this.pistonMeshes.values()) {
+      this.scene.remove(cached.group);
+      this.disposeGroup(cached.group);
+    }
+    this.pistonMeshes.clear();
 
     for (const group of this.dustMeshes.values()) {
       this.scene.remove(group);
